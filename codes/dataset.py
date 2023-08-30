@@ -11,6 +11,7 @@ import glob
 import torch
 from torch.utils.data import Dataset
 import torchvision
+from torchvision import transforms
 from sklearn.model_selection import train_test_split
 
 
@@ -26,9 +27,18 @@ class CKPlusDataset(Dataset):
     _images_folder = "cohn-kanade-images"
     _labels_folder = "Emotion"
 
-    def __init__(self, root_dir, transform=None, train=True):
+    def __init__(self, root_dir, transform=True, train=True, device='cpu'):
+        """`CK+ Dataset.
+
+        Args:
+            train (bool, optional): If True, creates dataset from training set, otherwise
+                creates from test set.
+            transform (bool, optional): Whether to do augmentation or not on the dataset
+            device (string): cuda or cpu
+        """
         self.root_dir = root_dir
         self.transform = transform
+        self.device = device
         self.image_dir = os.path.join(self.root_dir, self._images_folder)
         self.emotion_dir = os.path.join(self.root_dir, self._labels_folder)
         self.all_samples = self._load_samples()
@@ -44,6 +54,8 @@ class CKPlusDataset(Dataset):
     def _load_samples(self):
         """
         Returns images and labels path
+            image_files: path of image files 
+            label: path of corressponding emotion labels
 
         """
         label_files = glob.glob(os.path.join(self.emotion_dir, '*', '*', '*'+self._ext_labels))
@@ -54,108 +66,42 @@ class CKPlusDataset(Dataset):
         return len(self.image_path)
 
     def __getitem__(self, idx):
+        """
+        Returns images its labels w.r.t given index 
+            image: Tensor of shape (C, H, W) and type torch.float32
+            label: labels scalar of type torch.long
+
+        """
         image_path, emotion_path = self.image_path[idx], self.emotion_path[idx]
         
         image = Image.open(image_path).convert('RGB')
         
         with open(emotion_path, 'r') as f:
             emotion_label = int(f.readline().strip().split('.')[0])
+            emotion_label = torch.tensor(emotion_label, dtype=torch.long)
         
+        # Transformations and Augmentaions
+        totensor = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Resize([490, 640]),
+            ]
+        )
+        applier = transforms.RandomApply(
+                    transforms=[
+                        transforms.RandomAffine(degrees=30, translate=(.05, .1), scale=(1.1, 1.3)),
+                        transforms.ColorJitter(brightness=.5, hue=.3, contrast=.3, saturation=.2),
+                        transforms.GaussianBlur(kernel_size=(5,7), sigma=(.1,5)),
+                        transforms.RandomHorizontalFlip(p=.6),
+                    ],
+                    p=0.5
+                )
         if self.transform:
-            image = self.transform(image)
+            image = totensor(image).to(torch.float32)
+            image = applier(image)
+            
+        else:
+            image = totensor(image).to(torch.float32)
         
-        return image, torch.tensor(emotion_label, dtype=torch.float32)
+        return image.to(device=self.device), emotion_label.to(device=self.device)
 
-    
-
-
-
-
-
-
-# From https://github.com/WuJie1010/Facial-Expression-Recognition.Pytorch/blob/master/CK.py
-class CK(Dataset):
-    """`CK+ Dataset.
-
-    Args:
-        train (bool, optional): If True, creates dataset from training set, otherwise
-            creates from test set.
-        transform (callable, optional): A function/transform that  takes in an PIL image
-            and returns a transformed version. E.g, ``transforms.RandomCrop``
-
-        there are 135,177,75,207,84,249,54 images in data
-        we choose 123,159,66,186,75,225,48 images for training
-        we choose 12,8,9,21,9,24,6 images for testing
-        the split are in order according to the fold number
-    """
-
-    _ext_imgs = ".png"
-    _ext_labels = ".txt"
-
-    def __init__(self, path, split='Training', fold = 1, transform=None):
-        self.transform = transform
-        self.split = split  # training set or test set
-        self.fold = fold # the k-fold cross validation
-        self.data = h5py.File('./data/CK_data.h5', 'r', driver='core')
-
-        number = len(self.data['data_label']) #981
-        sum_number = [0,135,312,387,594,678,927,981] # the sum of class number
-        test_number = [12,18,9,21,9,24,6] # the number of each class
-
-        test_index = []
-        train_index = []
-
-        for j in xrange(len(test_number)):
-            for k in xrange(test_number[j]):
-                if self.fold != 10: #the last fold start from the last element
-                    test_index.append(sum_number[j]+(self.fold-1)*test_number[j]+k)
-                else:
-                    test_index.append(sum_number[j+1]-1-k)
-
-        for i in xrange(number):
-            if i not in test_index:
-                train_index.append(i)
-
-        print(len(train_index),len(test_index))
-
-        # now load the picked numpy arrays
-        if self.split == 'Training':
-            self.train_data = []
-            self.train_labels = []
-            for ind in xrange(len(train_index)):
-                self.train_data.append(self.data['data_pixel'][train_index[ind]])
-                self.train_labels.append(self.data['data_label'][train_index[ind]])
-
-        elif self.split == 'Testing':
-            self.test_data = []
-            self.test_labels = []
-            for ind in xrange(len(test_index)):
-                self.test_data.append(self.data['data_pixel'][test_index[ind]])
-                self.test_labels.append(self.data['data_label'][test_index[ind]])
-
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (image, target) where target is index of the target class.
-        """
-        if self.split == 'Training':
-            img, target = self.train_data[index], self.train_labels[index]
-        elif self.split == 'Testing':
-            img, target = self.test_data[index], self.test_labels[index]
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
-        img = img[:, :, np.newaxis]
-        img = np.concatenate((img, img, img), axis=2)
-        img = Image.fromarray(img)
-        if self.transform is not None:
-            img = self.transform(img)
-        return img, target
-
-    def __len__(self):
-        if self.split == 'Training':
-            return len(self.train_data)
-        elif self.split == 'Testing':
-            return len(self.test_data)
