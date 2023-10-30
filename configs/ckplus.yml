@@ -1,0 +1,16 @@
+data_params:
+  root_dir: dataset/CK+/
+  transform: True
+  out_class: 7
+  
+
+images:
+  in_channels: 3
+
+train_params:
+  num_epochs: 250
+  batch_size: 32
+  num_workers: 5
+  lr: 0.001
+  epoch_milestones: [180, 210]
+

@@ -6,6 +6,7 @@ import numpy as np
 from pathlib import Path
 import os
 import glob
+import ast
 
 
 import torch
@@ -19,6 +20,10 @@ from sklearn.model_selection import train_test_split
 EMOTIONS_CKPlus = ['neutral', 'anger', 'contempt',
                    'disgust', 'fear', 'happy',
                    'sadness', 'surprise']
+EMOTIONS_Emotic = ['Affection', 'Anger', 'Annoyance', 'Anticipation', 'Aversion', 'Confidence', 'Disapproval', 'Disconnection',
+                   'Disquietment', 'Doubt/Confusion', 'Embarrassment', 'Engagement', 'Esteem', 'Excitement', 'Fatigue', 'Fear',
+                   'Happiness', 'Pain', 'Peace', 'Pleasure', 'Sadness', 'Sensitivity', 'Suffering', 'Surprise', 'Sympathy', 'Yearning']
+
 
 class CKPlusDataset(Dataset):
 
@@ -68,7 +73,7 @@ class CKPlusDataset(Dataset):
     def __getitem__(self, idx):
         """
         Returns images its labels w.r.t given index 
-            image: Tensor of shape (C, H, W) and type torch.float32
+            image: Tensor of shape (C, H, W) and type torch.float32 (already normalized)
             label: labels scalar of type torch.long
 
         """
@@ -105,3 +110,101 @@ class CKPlusDataset(Dataset):
         
         return image.to(device=self.device), emotion_label.to(device=self.device)
 
+
+
+class Emotic_CSVDataset(Dataset):
+    ''' Custom Emotic dataset class. Use csv files and generated data at runtime. '''
+    def __init__(self, data_df, cat2ind, context_norm, body_norm, transform=True, data_src = './dataset/Emotic/'):
+        super(Emotic_CSVDataset,self).__init__()
+        self.data_df = data_df
+        self.data_src = data_src 
+        self.transform = transform 
+        self.cat2ind = cat2ind
+        self.context_norm = transforms.Normalize(mean=context_norm[0], std=context_norm[1])  # Normalizing the context image with context mean and context std
+        self.body_norm = transforms.Normalize(mean=body_norm[0], std=body_norm[1])           # Normalizing the body image with body mean and body std
+
+    def __len__(self):
+        return len(self.data_df)
+    
+    def __getitem__(self, index):
+        row = self.data_df.loc[index]
+        image_context = Image.open(os.path.join(self.data_src, "emotic", row['Folder'], row['Filename']))
+        bbox = ast.literal_eval(row['BBox'])
+        image_body = image_context.crop((bbox[0], bbox[1], bbox[2], bbox[3]))
+        
+        cat_labels = ast.literal_eval(row['Categorical_Labels'])
+        cont_labels = ast.literal_eval(row['Continuous_Labels'])
+        one_hot_cat_labels = self.cat_to_one_hot(cat_labels)
+
+        # Transformations and Augmentaions
+        totensor = transforms.Compose(
+            [
+                transforms.ToTensor(),
+            ]
+        )
+        applier = transforms.RandomApply(
+                    transforms=[
+                        transforms.RandomAffine(degrees=30, translate=(.05, .1), scale=(1.1, 1.3)),
+                        transforms.ColorJitter(brightness=.5, hue=.3, contrast=.3, saturation=.2),
+                        transforms.GaussianBlur(kernel_size=(5,7), sigma=(.1,5)),
+                        transforms.RandomHorizontalFlip(p=.6),
+                    ],
+                    p=0.5
+                )
+        
+        
+        image_context = image_context.resize((224, 224))
+        image_body = image_body.resize((128, 128))
+        image_context = totensor(image_context).to(torch.float32)
+        image_body = totensor(image_body).to(torch.float32)
+        
+        # Check if the image has 3 channels
+        image_context, image_body = self._ensure_3_channels(image_context, image_body)
+
+        assert image_body.shape[0] == image_context.shape[0] == 3, print("#####error:\n", image_body.shape, image_context.shape, row['Folder'], row['Filename'],"#####") #TODO: some images have 4 channels
+
+        if self.transform:
+            # image context
+            image_context = self.context_norm(image_context)
+            image_context = applier(image_context)
+            # image body
+            image_body = self.body_norm(image_body)
+            image_body = applier(image_body)
+            
+            
+        else:
+            
+            image_context = self.context_norm(image_context)
+            image_body = self.body_norm(image_body)
+            
+
+        return image_context, image_body, torch.tensor(one_hot_cat_labels, dtype=torch.float32), torch.tensor(cont_labels[0], dtype=torch.long)
+    
+    def cat_to_one_hot(self, cat):
+        one_hot_cat = np.zeros(26)
+        for em in cat:
+            one_hot_cat[self.cat2ind[em]] = 1
+        return one_hot_cat
+
+    def getitem_2plot(self, index):
+
+        row = self.data_df.loc[index]
+        image_context = Image.open(os.path.join(self.data_src, "emotic", row['Folder'], row['Filename']))
+        bbox = ast.literal_eval(row['BBox'])
+        image_body = image_context.crop((bbox[0], bbox[1], bbox[2], bbox[3]))
+
+        return image_context, image_body
+    
+    def _ensure_3_channels(self, image_context, image_body):
+        """ensure 3 channels for an image if it has other than 3 number of channels
+        """
+        if image_context.size(0) == 4 or image_body.size(0) == 4:
+            image_context = image_context[:3, ...]
+            image_body = image_body[:3, ...]
+        if image_context.size(0) == 1:
+            image_context = image_context.repeat(3, 1, 1)
+        if image_body.size(0) == 1:
+            image_body = image_body.repeat(3,1,1)
+        
+        
+        return image_context, image_body

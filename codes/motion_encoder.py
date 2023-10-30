@@ -4,7 +4,7 @@ import torchvision.models as models
 
 ### The ResNet is trained from scratch for the facial expresion prediction
 class ResNet18(nn.Module):
-    def __init__(self, in_channels, pretrained=False):
+    def __init__(self, in_channels, out_classes, pretrained=False):
         super(ResNet18, self).__init__()
         # If we want pretrained weights or not
         if pretrained:
@@ -15,9 +15,10 @@ class ResNet18(nn.Module):
         if in_channels != 3:
             self.model.conv1 = nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
-        # Set last fully connected layer to output 7 numbers;
-        # 3 for rotation, 3 for translation and 1 for scale (also needed to build translation matrix afterwards)
-        self.model.fc = nn.Linear(512, 7)
+        # Set last fully connected layer to output 8 numbers;
+        # due to 8 emotions as labels
+        self.model.fc = nn.Linear(512, out_classes)
 
     def forward(self, x):
         return self.model(x)
+

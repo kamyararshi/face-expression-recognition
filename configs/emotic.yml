@@ -1,0 +1,20 @@
+data_params:
+  root_dir: dataset/Emotic/
+  transform: True
+  out_class: 26
+  
+
+images:
+  in_channels: 3
+  context_mean: [0.4690646, 0.4407227, 0.40508908]
+  context_std: [0.2514227, 0.24312855, 0.24266963]
+  body_mean: [0.43832874, 0.3964344, 0.3706214]
+  body_std: [0.24784276, 0.23621225, 0.2323653]
+
+train_params:
+  num_epochs: 250
+  batch_size: 32
+  num_workers: 5
+  lr: 0.001
+  epoch_milestones: [180, 210]
+

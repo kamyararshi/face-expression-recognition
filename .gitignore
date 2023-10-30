@@ -1,8 +1,5 @@
 #Other folders and files
-dataset/CK+
-dataset/CK+.zip
-dataset/fer2013.tar.gz
-dataset/fer2013/
+dataset/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
