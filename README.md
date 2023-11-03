@@ -2,8 +2,8 @@
 A Facial Expression Recognition Model trained on multiple dataset.
 So far:
 
-- CKPlus dataset [Link](https://www.jeffcohn.net/Resources/)
-- Emotic dataet [Link](https://github.com/Tandon-A/emotic)
+- *CKPlus* dataset [Link](https://www.jeffcohn.net/Resources/)
+- *Emotic* dataet [Link](https://github.com/Tandon-A/emotic)
 
 
 ## Setup
@@ -23,7 +23,7 @@ pip install -r requirements.txt
 
 ## Training
 
-1. For the CKPlus dataset
+1. For the *CKPlus* dataset
 
 - Create `dataset` folder:
 
@@ -32,13 +32,13 @@ mkdir dataset
 ```
 
 - Unzip the `CK+.zip` dataset and put the folder `CK+` in the `dataset` folder
-- Modify the config file `ckplus.yml`, placed the `./configs/` directory, if needed
+- Modify the config file `ckplus.yml`, placed in the `./configs/` directory, if needed
 - training:
 ```bash
 python train_ck.py
 ```
 
-2. For the Emotic dataset
+2. For the *Emotic* dataset
 
 - Create `dataset` folder:
 
@@ -67,7 +67,7 @@ python ./codes/mat2py.py --data_dir ./dataset/Emotic/
 ```
 **See this [repo](https://github.com/Tandon-A/emotic) for more info**
 
-- Modify the config file `emotic.yml`, placed the `./configs/` directory, if needed
+- Modify the config file `emotic.yml`, placed in the `./configs/` directory, if needed
 - training:
 ```bash
 python train_emotic.py
