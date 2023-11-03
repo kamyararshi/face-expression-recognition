@@ -155,27 +155,27 @@ class Emotic_CSVDataset(Dataset):
         
         image_context = image_context.resize((224, 224))
         image_body = image_body.resize((128, 128))
-        image_context = totensor(image_context).to(torch.float32)
-        image_body = totensor(image_body).to(torch.float32)
+        image_context_tensor = totensor(image_context).to(torch.float32)
+        image_body_tensor = totensor(image_body).to(torch.float32)
         
         # Check if the image has 3 channels
-        image_context, image_body = self._ensure_3_channels(image_context, image_body)
+        image_context_tensor, image_body_tensor = self._ensure_3_channels(image_context_tensor, image_body_tensor)
 
-        assert image_body.shape[0] == image_context.shape[0] == 3, print("#####error:\n", image_body.shape, image_context.shape, row['Folder'], row['Filename'],"#####") #TODO: some images have 4 channels
+        assert image_body_tensor.shape[0] == image_context_tensor.shape[0] == 3, print("#####error:\n", image_body_tensor.shape, image_context_tensor.shape, row['Folder'], row['Filename'],"#####")
 
         if self.transform:
             # image context
-            image_context = self.context_norm(image_context)
+            image_context = self.context_norm(image_context_tensor)
             image_context = applier(image_context)
             # image body
-            image_body = self.body_norm(image_body)
+            image_body = self.body_norm(image_body_tensor)
             image_body = applier(image_body)
             
             
         else:
             
             image_context = self.context_norm(image_context)
-            image_body = self.body_norm(image_body)
+            image_body = self.body_norm(image_body_tensor)
             
 
         return image_context, image_body, torch.tensor(one_hot_cat_labels, dtype=torch.float32), torch.tensor(cont_labels[0], dtype=torch.long)

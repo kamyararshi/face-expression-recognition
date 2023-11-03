@@ -11,16 +11,51 @@ from codes import dataset, motion_encoder
 import yaml
 import matplotlib.pyplot as plt
 import pandas as pd
+import argparse
 from argparse import ArgumentParser
 import tqdm
 import logging
 from time import gmtime, strftime
 from shutil import copy
 import os
+import signal
 
 
 import warnings
 warnings.filterwarnings('ignore')
+
+#TODO: Use it
+def save_weights_on_interrupt(model, epoch, optimizer, train_loss, log_dir):
+    """
+    Save the model's weights to a file when the program is interrupted (e.g., CTRL+C).
+
+    Args:
+        model (torch.nn.Module): The PyTorch model whose weights you want to save.
+        save_path (str): The path to save the model's weights.
+    """
+    def save_weights(signum, frame):
+        print("Received interrupt signal. Saving model weights...")
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': train_loss[-1],
+            }, os.path.join(log_dir, f'{epoch+1}.pth.tar'))
+        
+        print("Model weights saved.")
+        exit(1)  # You can exit the program or perform other actions as needed
+
+    # Register the signal handler
+    signal.signal(signal.SIGINT, save_weights)
+
+    # Start the training loop
+    try:
+        while True:
+            # Your training loop code goes here
+            # You can replace this with your actual training code
+            pass
+    except KeyboardInterrupt:
+        pass  # Handle the interrupt signal with the signal handler
 
 def cal_accuracy(predictions, true_labels, logits=True, in_precent=True):
     """Calculates the prediction accuracy
@@ -64,7 +99,9 @@ def main():
           default='./configs/emotic.yml', type=str)
     parser.add_argument('--log_dir', dest='log_dir', help='Path to logs and saved checkpoints.',
           default='./logs/', type=str)
-    parser.add_argument('--test_script', dest='test_script', help="tests the model, Dloader, and all the batches",
+    parser.add_argument('--test_script', action=argparse.BooleanOptionalAction, help="tests the model, Dloader, and all the batches",
+                        default=False, type=bool)
+    parser.add_argument('--pretrained', action=argparse.BooleanOptionalAction, help="whether the backbone uses pretrained weights",
                         default=False, type=bool)
     
     args = parser.parse_args()
@@ -103,14 +140,16 @@ def main():
 
     dataset_train = dataset.Emotic_CSVDataset(pd.read_csv(train_df_dir), cat2ind, context_norm, body_norm)
     dataset_test = dataset.Emotic_CSVDataset(pd.read_csv(test_df_dir), cat2ind, context_norm, body_norm)
+    num_test_data = dataset_test.__len__()
 
     # Dataloaders
     train_loader = DataLoader(dataset_train, batch_size=configs['train_params']['batch_size'], shuffle=True, num_workers=configs['train_params']['num_workers'])
     test_loader = DataLoader(dataset_test, batch_size=configs['train_params']['batch_size'], shuffle=False, num_workers=configs['train_params']['num_workers'])
 
     #Model
-    model = motion_encoder.ResNet18(in_channels=configs['images']['in_channels'], out_classes=configs['data_params']['out_class'], pretrained=True)
+    model = motion_encoder.ResNet18(in_channels=configs['images']['in_channels'], out_classes=configs['data_params']['out_class'], pretrained=args.pretrained)
     model.to(device)
+    if args.pretrained: print("Model with pretrained weghts loaded")
 
     if args.test_script:
         # Test Model and DLoader
@@ -137,7 +176,7 @@ def main():
     writer = SummaryWriter(log_dir=log_dir)
     train_loss=[]
     for epoch in tqdm.trange(configs['train_params']['num_epochs']):
-        for batch in tqdm.tqdm(train_loader):
+        for batch in tqdm.tqdm(test_loader): #TODO: This is only trial to see what's wrong, it's training on the test set (smaller)
             model.train()
             optimizer.zero_grad()
 
@@ -159,14 +198,14 @@ def main():
         eval_loss=[]
         with torch.no_grad():
             i=0
-            sum_accuracy=[]
+            sum_accuracy=0
             for i, batch in enumerate(test_loader):
                 _, img, _, labels = batch
                 img = img.to(device)
                 labels = labels.to(device)
                 logits = model(img)
                 eval_loss.append(criterion(logits, labels).item())
-                sum_accuracy.append(cal_accuracy(logits, labels))
+                sum_accuracy += cal_accuracy(logits, labels) * img.shape[0]
             
             # Plot the image and label
             idx = 0
@@ -182,7 +221,7 @@ def main():
         writer.add_scalar("Eval Loss", avg_eval_loss, epoch)
 
         # Logg the average accuracy of test set
-        logg_accuracy(f"epoch: {epoch} - acc: {sum_accuracy}", os.path.join(log_dir, "test-set-acc.txt"))
+        logg_accuracy(f"epoch: {epoch} - avg_acc: {(sum_accuracy/num_test_data):.2f} - loss: {eval_loss[-1]:.2f}", os.path.join(log_dir, "test-set-acc.txt"))
 
         scheduler.step()
 

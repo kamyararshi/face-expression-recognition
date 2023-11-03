@@ -16,9 +16,20 @@ class ResNet18(nn.Module):
             self.model.conv1 = nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
         # Set last fully connected layer to output 8 numbers;
-        # due to 8 emotions as labels
-        self.model.fc = nn.Linear(512, out_classes)
+        # due to 8 emotions as labels for ck+
+        # TODO: find the best architecture for emotic
+        self.model.fc = nn.Linear(512, 256)
+
+        self.classifier = nn.Sequential(
+            nn.Linear(256, 64),
+            nn.AdaptiveAvgPool1d(64),
+            nn.ReLU(),
+            nn.Linear(64, out_classes),
+            nn.ReLU()
+        )
 
     def forward(self, x):
-        return self.model(x)
+        x = self.model(x)
+        x = self.classifier(x)
+        return x
 
